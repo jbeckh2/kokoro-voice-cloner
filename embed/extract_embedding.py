@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #!/usr/bin/env python
 """
 Extract a Kokoro-compatible speaker embedding from processed recordings.
@@ -72,7 +73,7 @@ def inspect_voices(voices_dir: str) -> dict | None:
                         print(f"    [{k}]: shape={val.shape}  dtype={val.dtype}")
                 return {"type": "dict", "sample": item}
             else:
-                print(f"  Format ({npy_files[0]}): object → {type(item)}")
+                print(f"  Format ({npy_files[0]}): object -> {type(item)}")
                 return {"type": "object", "sample": item}
         else:
             print(f"  Format ({npy_files[0]}): ndarray  shape={v.shape}  dtype={v.dtype}")
@@ -122,7 +123,7 @@ def extract_kokoro(wav_paths: list[str]) -> np.ndarray | None:
             return None
 
         result = np.mean(embeddings, axis=0)
-        print(f"\n  Averaged {len(embeddings)} embeddings → shape={result.shape}  dtype={result.dtype}")
+        print(f"\n  Averaged {len(embeddings)} embeddings -> shape={result.shape}  dtype={result.dtype}")
         return result
 
     except ImportError:
@@ -162,7 +163,7 @@ def extract_torch_fallback(wav_paths: list[str]) -> np.ndarray | None:
                 mel_db = librosa.power_to_db(mel)          # (N_MELS, T)
                 stats  = np.concatenate([
                     mel_db.mean(axis=1),                   # (N_MELS,)
-                    mel_db.std(axis=1),                    # (N_MELS,)  → total 160
+                    mel_db.std(axis=1),                    # (N_MELS,)  -> total 160
                 ])
                 all_stats.append(stats)
                 print(f"  OK  {os.path.basename(path):30s}")
@@ -184,7 +185,7 @@ def extract_torch_fallback(wav_paths: list[str]) -> np.ndarray | None:
             avg = avg[:, :TARGET_DIM]
 
         avg = avg.astype(np.float32)
-        print(f"\n  Averaged {len(all_stats)} files → shape={avg.shape}  dtype={avg.dtype}")
+        print(f"\n  Averaged {len(all_stats)} files -> shape={avg.shape}  dtype={avg.dtype}")
         print("  WARNING: torch fallback used. Voice quality may be limited.")
         print("           For best results, ensure C:\\Code\\Text2Speech uses kokoro in a venv.")
         return avg
