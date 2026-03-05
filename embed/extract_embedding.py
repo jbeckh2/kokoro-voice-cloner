@@ -5,15 +5,17 @@ Extract a Kokoro-compatible speaker embedding from processed recordings.
 
 Strategy (tried in order)
 --------------------------
-1. Borrow kokoro from C:\\Code\\Text2Speech — most compatible, no extra install needed.
-2. Import kokoro from the active environment (if it was installed separately).
-3. Pure-torch fallback: mel-spectrogram statistics via torchaudio.
-   NOTE: method 3 may not be compatible with all Kokoro versions; prefer 1 or 2.
+1. Borrow kokoro from C:\\code\\Text2Speech venv -- most compatible, no extra install.
+2. Import kokoro from the active environment (if installed separately).
+3. Librosa mel-spectrogram fallback -- no torch needed, pure numpy/librosa.
+
+The raw (1, 256) embedding is then tiled to the full voicepack shape
+(n_tokens, 1, 256) so Kokoro can load it like any other voice file.
 
 Usage:
     python extract_embedding.py [--input recordings_processed]
                                 [--output jenny.npy]
-                                [--deploy C:\\Code\\Text2Speech\\voices\\jenny.npy]
+                                [--deploy <path>]
                                 [--no-deploy]
 """
 
@@ -24,21 +26,20 @@ import sys
 
 import numpy as np
 
-VOICES_DIR     = r"C:\Code\Text2Speech\voices"
+VOICES_DIR     = r"C:\code\Text2Speech\bin\Release\net8.0\voices"
 DEFAULT_DEPLOY = os.path.join(VOICES_DIR, "jenny.npy")
 
-# Candidate site-packages dirs inside the Text2Speech project
 _T2S_SITEPKG_CANDIDATES = [
+    r"C:\code\Text2Speech\venv\Lib\site-packages",
+    r"C:\code\Text2Speech\.venv\Lib\site-packages",
     r"C:\Code\Text2Speech\venv\Lib\site-packages",
-    r"C:\Code\Text2Speech\.venv\Lib\site-packages",
-    r"C:\Code\Text2Speech\env\Lib\site-packages",
+    r"C:\Code\Text2Speech\bin\Release\net8.0\venv\Lib\site-packages",
 ]
 
 
-# ── Step 0: inject Text2Speech site-packages so we can import kokoro ─────────
+# ── Inject Text2Speech venv so kokoro is importable ───────────────────────────
 
 def _inject_text2speech_venv() -> bool:
-    """Add C:\\Code\\Text2Speech venv to sys.path so kokoro is importable."""
     for p in _T2S_SITEPKG_CANDIDATES:
         if os.path.isdir(p) and os.path.isdir(os.path.join(p, "kokoro")):
             if p not in sys.path:
@@ -87,25 +88,23 @@ def inspect_voices(voices_dir: str) -> dict | None:
 
 def extract_kokoro(wav_paths: list[str]) -> np.ndarray | None:
     """
-    Use Kokoro / StyleTTS2 compute_style().
-    Returns shape (1, 256) on Kokoro-82M: first 128 dims = style, next 128 = prosody.
-    Tries the Text2Speech venv first, then falls back to whatever is on sys.path.
+    Use Kokoro / StyleTTS2 compute_style() -> (1, 256).
+    Tries the Text2Speech venv first, then the active environment.
     """
-    # Try to make kokoro importable from the existing Text2Speech install
     found_t2s = _inject_text2speech_venv()
     if not found_t2s:
-        print("  Text2Speech kokoro venv not found — trying active environment.")
+        print("  Text2Speech kokoro venv not found -- trying active environment.")
 
     try:
         import torch
         from kokoro import KPipeline
 
-        print("  Loading Kokoro pipeline…")
+        print("  Loading Kokoro pipeline...")
         pipe = KPipeline(lang_code="a")
 
         model = pipe.model
         if not hasattr(model, "compute_style"):
-            print("  KPipeline.model has no compute_style — skipping Kokoro method.")
+            print("  KPipeline.model has no compute_style -- skipping Kokoro method.")
             return None
 
         embeddings = []
@@ -134,18 +133,15 @@ def extract_kokoro(wav_paths: list[str]) -> np.ndarray | None:
         return None
 
 
-# ── Step 2b: librosa-based fallback ──────────────────────────────────────────
+# ── Step 2b: librosa fallback ─────────────────────────────────────────────────
 
-def extract_torch_fallback(wav_paths: list[str]) -> np.ndarray | None:
+def extract_librosa_fallback(wav_paths: list[str]) -> np.ndarray | None:
     """
-    Librosa-based fallback — uses only librosa + numpy (already installed).
-    Avoids torchaudio.load which requires torchcodec on torchaudio >= 2.6.
+    Librosa mel-spectrogram statistics fallback.
+    Uses only librosa + numpy -- no torch or C extensions required.
+    Produces (1, 256) by computing mean+std of log-mel bands then padding.
 
-    Computes log-mel spectrogram statistics (mean + std per band) and projects
-    to 256 dims to match Kokoro-82M's expected style vector shape.
-    Result shape: (1, 256).
-
-    NOTE: Best-effort approximation. Use the Kokoro method for real quality.
+    NOTE: Best-effort speaker approximation. Use the Kokoro method for quality.
     """
     try:
         import librosa
@@ -175,24 +171,44 @@ def extract_torch_fallback(wav_paths: list[str]) -> np.ndarray | None:
 
         avg = np.mean(all_stats, axis=0).reshape(1, -1)   # (1, 160)
 
-        # Pad / truncate to TARGET_DIM
-        current_dim = avg.shape[1]
-        if current_dim < TARGET_DIM:
+        # Pad to TARGET_DIM
+        if avg.shape[1] < TARGET_DIM:
             avg = np.concatenate(
-                [avg, np.zeros((1, TARGET_DIM - current_dim), dtype=np.float32)], axis=1
+                [avg, np.zeros((1, TARGET_DIM - avg.shape[1]), dtype=np.float32)], axis=1
             )
         else:
             avg = avg[:, :TARGET_DIM]
 
         avg = avg.astype(np.float32)
         print(f"\n  Averaged {len(all_stats)} files -> shape={avg.shape}  dtype={avg.dtype}")
-        print("  WARNING: torch fallback used. Voice quality may be limited.")
-        print("           For best results, ensure C:\\Code\\Text2Speech uses kokoro in a venv.")
+        print("  WARNING: librosa fallback used. Voice quality may be limited.")
+        print("           For best results, ensure kokoro is accessible from the Text2Speech venv.")
         return avg
 
     except Exception as exc:
-        print(f"  torch fallback failed: {exc}")
+        print(f"  librosa fallback failed: {exc}")
         return None
+
+
+# ── Step 3: tile to full voicepack shape ──────────────────────────────────────
+
+def reshape_to_voicepack(embedding: np.ndarray, target_shape: tuple) -> np.ndarray:
+    """
+    Tile a single (1, style_dim) embedding to (n_tokens, 1, style_dim).
+
+    Kokoro voices are shape (n_tokens, 1, style_dim), e.g. (510, 1, 256).
+    Repeating the same style vector across all token positions is standard for
+    single-speaker voice files -- every phoneme gets the same speaker identity.
+    """
+    emb2d     = embedding.reshape(1, -1)      # (1, style_dim)
+    n_tokens  = target_shape[0]
+    n_mid     = len(target_shape) - 2         # middle dims between n_tokens and style_dim
+
+    tiled = np.tile(emb2d, (n_tokens, 1))    # (n_tokens, style_dim)
+    for _ in range(n_mid):
+        tiled = tiled[:, np.newaxis, :]       # (n_tokens, 1, style_dim)
+
+    return tiled.astype(np.float32)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -201,16 +217,10 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
     parser = argparse.ArgumentParser(description="Extract Kokoro speaker embedding")
-    parser.add_argument(
-        "--input", "-i",
-        default=os.path.join(script_dir, "recordings_processed"),
-    )
-    parser.add_argument(
-        "--output", "-o",
-        default=os.path.join(script_dir, "jenny.npy"),
-    )
-    parser.add_argument("--deploy",    default=DEFAULT_DEPLOY)
-    parser.add_argument("--no-deploy", action="store_true")
+    parser.add_argument("--input",  "-i", default=os.path.join(script_dir, "recordings_processed"))
+    parser.add_argument("--output", "-o", default=os.path.join(script_dir, "jenny.npy"))
+    parser.add_argument("--deploy",       default=DEFAULT_DEPLOY)
+    parser.add_argument("--no-deploy",    action="store_true")
     args = parser.parse_args()
 
     input_dir   = os.path.abspath(args.input)
@@ -237,27 +247,33 @@ def main():
     fmt = inspect_voices(VOICES_DIR)
     print()
 
-    # ── Extract ──────────────────────────────────────────────────────────────
+    # ── Extract raw speaker embedding ────────────────────────────────────────
     print("--- Extracting speaker embeddings (Kokoro method) ---")
     embedding = extract_kokoro(wavs)
 
     if embedding is None:
-        print("\n--- Kokoro unavailable; using torch mel-spectrogram fallback ---")
-        embedding = extract_torch_fallback(wavs)
+        print("\n--- Kokoro unavailable; using librosa fallback ---")
+        embedding = extract_librosa_fallback(wavs)
 
     if embedding is None:
         print("\nERROR: All extraction methods failed.")
         sys.exit(1)
 
+    # ── Tile to voicepack shape ───────────────────────────────────────────────
+    target_shape = (510, 1, 256)   # Kokoro-82M default
+    if fmt and fmt.get("type") == "ndarray":
+        target_shape = fmt["shape"]
+        print(f"Target shape (from existing voices): {target_shape}")
+    else:
+        print(f"Target shape (default Kokoro-82M):   {target_shape}")
+
+    voicepack = reshape_to_voicepack(embedding, target_shape)
+    print(f"Voicepack: {voicepack.shape}  dtype: {voicepack.dtype}\n")
+
     # ── Save ─────────────────────────────────────────────────────────────────
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-    np.save(output_path, embedding)
-    print(f"\nSaved: {output_path}")
-    print(f"Shape: {embedding.shape}  dtype: {embedding.dtype}")
-
-    if fmt and fmt["type"] == "ndarray" and embedding.shape != fmt["shape"]:
-        print(f"\nWARNING: shape {embedding.shape} ≠ expected {fmt['shape']}.")
-        print("Kokoro may reject this or produce distorted output.")
+    np.save(output_path, voicepack)
+    print(f"Saved: {output_path}")
 
     # ── Deploy ───────────────────────────────────────────────────────────────
     if not args.no_deploy:
@@ -266,7 +282,7 @@ def main():
             shutil.copy2(output_path, args.deploy)
             print(f"Deployed to: {args.deploy}")
         else:
-            print(f"\nNote: {deploy_dir} not found — copy {output_path} manually.")
+            print(f"\nNote: {deploy_dir} not found -- copy {output_path} manually.")
 
     print("\nDone!")
 
