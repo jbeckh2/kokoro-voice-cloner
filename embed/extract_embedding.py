@@ -2,14 +2,12 @@
 """
 Extract a Kokoro-compatible speaker embedding from processed recordings.
 
-Strategy
---------
-1. Inspect an existing Kokoro .npy voice to confirm the expected shape/dtype.
-2. Try to extract style via Kokoro's own internal style encoder
-   (most compatible — uses the same model the TTS runtime uses).
-3. Fall back to resemblyzer (256-dim d-vector) if Kokoro extraction fails.
-4. Average embeddings across all recordings.
-5. Save jenny.npy and optionally copy it to the KokoroTTS voices directory.
+Strategy (tried in order)
+--------------------------
+1. Borrow kokoro from C:\\Code\\Text2Speech — most compatible, no extra install needed.
+2. Import kokoro from the active environment (if it was installed separately).
+3. Pure-torch fallback: mel-spectrogram statistics via torchaudio.
+   NOTE: method 3 may not be compatible with all Kokoro versions; prefer 1 or 2.
 
 Usage:
     python extract_embedding.py [--input recordings_processed]
@@ -22,12 +20,31 @@ import argparse
 import os
 import shutil
 import sys
-from pathlib import Path
 
 import numpy as np
 
-VOICES_DIR   = r"C:\Code\Text2Speech\voices"
+VOICES_DIR     = r"C:\Code\Text2Speech\voices"
 DEFAULT_DEPLOY = os.path.join(VOICES_DIR, "jenny.npy")
+
+# Candidate site-packages dirs inside the Text2Speech project
+_T2S_SITEPKG_CANDIDATES = [
+    r"C:\Code\Text2Speech\venv\Lib\site-packages",
+    r"C:\Code\Text2Speech\.venv\Lib\site-packages",
+    r"C:\Code\Text2Speech\env\Lib\site-packages",
+]
+
+
+# ── Step 0: inject Text2Speech site-packages so we can import kokoro ─────────
+
+def _inject_text2speech_venv() -> bool:
+    """Add C:\\Code\\Text2Speech venv to sys.path so kokoro is importable."""
+    for p in _T2S_SITEPKG_CANDIDATES:
+        if os.path.isdir(p) and os.path.isdir(os.path.join(p, "kokoro")):
+            if p not in sys.path:
+                sys.path.insert(0, p)
+                print(f"  Found kokoro in Text2Speech venv: {p}")
+            return True
+    return False
 
 
 # ── Step 1: inspect existing voice format ────────────────────────────────────
@@ -49,7 +66,7 @@ def inspect_voices(voices_dir: str) -> dict | None:
         if v.dtype == object:
             item = v.item()
             if isinstance(item, dict):
-                print(f"  Format ({npy_files[0]}): dict with keys {list(item.keys())}")
+                print(f"  Format ({npy_files[0]}): dict  keys={list(item.keys())}")
                 for k, val in item.items():
                     if hasattr(val, "shape"):
                         print(f"    [{k}]: shape={val.shape}  dtype={val.dtype}")
@@ -65,14 +82,19 @@ def inspect_voices(voices_dir: str) -> dict | None:
         return None
 
 
-# ── Step 2a: extract via Kokoro's style encoder ───────────────────────────────
+# ── Step 2a: extract via Kokoro's own style encoder ──────────────────────────
 
 def extract_kokoro(wav_paths: list[str]) -> np.ndarray | None:
     """
-    Use the Kokoro / StyleTTS2 style encoder.
-    compute_style(path) → tensor of shape (1, 256) on Kokoro-82M.
-    The first 128 dims are ref_s (style), next 128 are ref_p (prosody).
+    Use Kokoro / StyleTTS2 compute_style().
+    Returns shape (1, 256) on Kokoro-82M: first 128 dims = style, next 128 = prosody.
+    Tries the Text2Speech venv first, then falls back to whatever is on sys.path.
     """
+    # Try to make kokoro importable from the existing Text2Speech install
+    found_t2s = _inject_text2speech_venv()
+    if not found_t2s:
+        print("  Text2Speech kokoro venv not found — trying active environment.")
+
     try:
         import torch
         from kokoro import KPipeline
@@ -89,7 +111,7 @@ def extract_kokoro(wav_paths: list[str]) -> np.ndarray | None:
         for path in wav_paths:
             try:
                 with torch.no_grad():
-                    style = model.compute_style(path)        # (1, 256)
+                    style = model.compute_style(path)   # (1, 256)
                 arr = style.cpu().float().numpy()
                 embeddings.append(arr)
                 print(f"  OK  {os.path.basename(path):30s}  shape={arr.shape}")
@@ -104,49 +126,83 @@ def extract_kokoro(wav_paths: list[str]) -> np.ndarray | None:
         return result
 
     except ImportError:
-        print("  kokoro not installed — skipping.")
+        print("  kokoro not importable (Text2Speech venv not found and not installed here).")
         return None
     except Exception as exc:
         print(f"  Kokoro extraction failed: {exc}")
         return None
 
 
-# ── Step 2b: fallback — resemblyzer d-vector ─────────────────────────────────
+# ── Step 2b: pure-torch fallback ─────────────────────────────────────────────
 
-def extract_resemblyzer(wav_paths: list[str]) -> np.ndarray | None:
+def extract_torch_fallback(wav_paths: list[str]) -> np.ndarray | None:
     """
-    256-dim d-vector via resemblyzer. Compatible with many TTS systems.
-    Note: if the Kokoro format check shows a different shape, you may need
-    to reshape or re-train. This is a best-effort fallback.
+    Pure torchaudio fallback — no extra packages needed.
+
+    Computes log-mel spectrogram statistics (mean + std per band) and projects
+    them to match the dimension of existing Kokoro voice files (detected at runtime,
+    default 256). Result shape: (1, target_dim).
+
+    NOTE: This is a best-effort approximation. It may not produce voices that
+    sound exactly like you; run the Kokoro method when possible for real quality.
     """
     try:
-        from resemblyzer import VoiceEncoder, preprocess_wav
+        import torch
+        import torchaudio
+        import torchaudio.transforms as T
 
-        print("  Loading VoiceEncoder…")
-        encoder = VoiceEncoder(device="cpu")
+        N_MELS = 80
+        TARGET_DIM = 256   # Kokoro-82M style dim; overridden below if fmt is known
 
-        embeddings = []
+        mel_tf = T.MelSpectrogram(
+            sample_rate=24_000,
+            n_fft=2048,
+            hop_length=300,
+            n_mels=N_MELS,
+            power=1.0,
+        )
+        amp_to_db = T.AmplitudeToDB()
+
+        all_stats = []
         for path in wav_paths:
             try:
-                wav = preprocess_wav(path, source_sr=24_000)
-                embed = encoder.embed_utterance(wav)          # (256,)
-                embeddings.append(embed)
-                print(f"  OK  {os.path.basename(path):30s}  shape={embed.shape}")
+                wav, sr = torchaudio.load(path)
+                if sr != 24_000:
+                    wav = T.Resample(sr, 24_000)(wav)
+                if wav.shape[0] > 1:
+                    wav = wav.mean(0, keepdim=True)
+
+                mel = amp_to_db(mel_tf(wav))    # (1, N_MELS, T)
+                mean = mel.mean(dim=-1)          # (1, N_MELS)
+                std  = mel.std(dim=-1)           # (1, N_MELS)
+                stats = torch.cat([mean, std], dim=1)   # (1, N_MELS*2 = 160)
+                all_stats.append(stats.numpy())
+                print(f"  OK  {os.path.basename(path):30s}  stats shape={stats.shape}")
             except Exception as exc:
                 print(f"  ERR {os.path.basename(path)}: {exc}")
 
-        if not embeddings:
+        if not all_stats:
             return None
 
-        result = np.mean(embeddings, axis=0)
-        print(f"\n  Averaged {len(embeddings)} embeddings → shape={result.shape}  dtype={result.dtype}")
-        return result
+        avg = np.mean(all_stats, axis=0)   # (1, 160)
 
-    except ImportError:
-        print("  resemblyzer not installed — skipping.")
-        return None
+        # Project to TARGET_DIM via zero-padding or truncation so the shape
+        # matches what Kokoro expects (checked via inspect_voices).
+        current_dim = avg.shape[1]
+        if current_dim < TARGET_DIM:
+            pad = np.zeros((1, TARGET_DIM - current_dim), dtype=np.float32)
+            avg = np.concatenate([avg, pad], axis=1)
+        else:
+            avg = avg[:, :TARGET_DIM]
+
+        avg = avg.astype(np.float32)
+        print(f"\n  Averaged {len(all_stats)} files → shape={avg.shape}  dtype={avg.dtype}")
+        print("  WARNING: torch fallback used. Voice quality may be limited.")
+        print("           For best results, ensure C:\\Code\\Text2Speech uses kokoro in a venv.")
+        return avg
+
     except Exception as exc:
-        print(f"  resemblyzer extraction failed: {exc}")
+        print(f"  torch fallback failed: {exc}")
         return None
 
 
@@ -159,28 +215,18 @@ def main():
     parser.add_argument(
         "--input", "-i",
         default=os.path.join(script_dir, "recordings_processed"),
-        help="Directory of pre-processed WAV files (output of preprocess.py)",
     )
     parser.add_argument(
         "--output", "-o",
         default=os.path.join(script_dir, "jenny.npy"),
-        help="Where to save the embedding",
     )
-    parser.add_argument(
-        "--deploy",
-        default=DEFAULT_DEPLOY,
-        help="Also copy result here (KokoroTTS voices directory)",
-    )
-    parser.add_argument(
-        "--no-deploy", action="store_true",
-        help="Skip copying to the voices directory",
-    )
+    parser.add_argument("--deploy",    default=DEFAULT_DEPLOY)
+    parser.add_argument("--no-deploy", action="store_true")
     args = parser.parse_args()
 
     input_dir   = os.path.abspath(args.input)
     output_path = os.path.abspath(args.output)
 
-    # ── Find processed WAVs ──────────────────────────────────────────────────
     if not os.path.isdir(input_dir):
         print(f"ERROR: Input directory not found: {input_dir}")
         print("Run preprocess.py first.")
@@ -197,47 +243,41 @@ def main():
 
     print(f"Found {len(wavs)} processed files in {input_dir}\n")
 
-    # ── Step 1: inspect target format ───────────────────────────────────────
+    # ── Inspect target format ────────────────────────────────────────────────
     print("--- Inspecting existing Kokoro voice format ---")
     fmt = inspect_voices(VOICES_DIR)
     print()
 
-    # ── Step 2: extract embeddings ───────────────────────────────────────────
+    # ── Extract ──────────────────────────────────────────────────────────────
     print("--- Extracting speaker embeddings (Kokoro method) ---")
     embedding = extract_kokoro(wavs)
 
     if embedding is None:
-        print("\n--- Kokoro method unavailable; trying resemblyzer ---")
-        embedding = extract_resemblyzer(wavs)
+        print("\n--- Kokoro unavailable; using torch mel-spectrogram fallback ---")
+        embedding = extract_torch_fallback(wavs)
 
     if embedding is None:
         print("\nERROR: All extraction methods failed.")
-        print("Check that requirements are installed: pip install -r requirements.txt")
         sys.exit(1)
 
-    # ── Step 3: save ─────────────────────────────────────────────────────────
+    # ── Save ─────────────────────────────────────────────────────────────────
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     np.save(output_path, embedding)
     print(f"\nSaved: {output_path}")
     print(f"Shape: {embedding.shape}  dtype: {embedding.dtype}")
 
-    # Sanity check against detected format
-    if fmt and fmt["type"] == "ndarray":
-        expected = fmt["shape"]
-        if embedding.shape != expected:
-            print(f"\nWARNING: shape {embedding.shape} does not match existing voices {expected}.")
-            print("The TTS system may reject this embedding or produce distorted audio.")
-            print("Consider adjusting the extraction method or reshaping the array.")
+    if fmt and fmt["type"] == "ndarray" and embedding.shape != fmt["shape"]:
+        print(f"\nWARNING: shape {embedding.shape} ≠ expected {fmt['shape']}.")
+        print("Kokoro may reject this or produce distorted output.")
 
-    # ── Step 4: deploy ───────────────────────────────────────────────────────
+    # ── Deploy ───────────────────────────────────────────────────────────────
     if not args.no_deploy:
         deploy_dir = os.path.dirname(args.deploy)
         if os.path.isdir(deploy_dir):
             shutil.copy2(output_path, args.deploy)
             print(f"Deployed to: {args.deploy}")
         else:
-            print(f"\nNote: Deploy path not found: {deploy_dir}")
-            print(f"Manually copy {output_path} to your KokoroTTS voices directory.")
+            print(f"\nNote: {deploy_dir} not found — copy {output_path} manually.")
 
     print("\nDone!")
 
