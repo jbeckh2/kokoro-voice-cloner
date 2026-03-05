@@ -492,10 +492,19 @@ public class MainForm : Form
         _genStatus.Text = "Done — check output above.";
     }
 
+    private static string ResolveVenvPython(string embedDir)
+    {
+        // Prefer the venv interpreter so venv packages are available without activation
+        var venvPy = Path.Combine(embedDir, "venv", "Scripts", "python.exe");
+        return File.Exists(venvPy) ? venvPy : "python";
+    }
+
     private void RunPy(string dir, string script, string args)
     {
         AppendLog($"=== {script} ===\n");
-        var psi = new ProcessStartInfo("python", $"{script} {args}")
+        var pythonExe = ResolveVenvPython(dir);
+        AppendLog($"python: {pythonExe}\n");
+        var psi = new ProcessStartInfo(pythonExe, $"{script} {args}")
         {
             WorkingDirectory = dir,
             RedirectStandardOutput = true,
@@ -516,7 +525,8 @@ public class MainForm : Form
         catch (Exception ex)
         {
             AppendLog($"Failed to start python: {ex.Message}\n");
-            AppendLog("Ensure Python is on PATH and embed/venv is activated, or run manually.\n");
+            AppendLog($"Expected venv at: {Path.Combine(dir, "venv")}\n");
+            AppendLog("Run embed\\setup.bat first, then try again.\n");
         }
     }
 
