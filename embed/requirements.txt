@@ -1,0 +1,19 @@
+# Core audio
+librosa>=0.10.0
+soundfile>=0.12.0
+noisereduce>=3.0.0
+
+# Speaker embedding — resemblyzer produces 256-dim d-vectors
+resemblyzer>=0.1.3
+
+# Kokoro TTS (for compatible style extraction)
+# Install first to get the model; its style encoder is used in extract_embedding.py
+kokoro>=0.9.4
+
+# Tensor ops (CPU-only build — see setup.bat for the correct install command)
+# Do NOT run plain `pip install torch`; use the CPU wheel to avoid a 2 GB CUDA download:
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+torch>=2.0.0
+torchaudio>=2.0.0
+
+numpy>=1.23.0

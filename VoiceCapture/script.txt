@@ -1,0 +1,102 @@
+# VoiceClone recording script — 100 phoneme-balanced sentences
+# One sentence per line. Read naturally. Re-record any line that feels off.
+
+The quick brown fox jumps over the lazy dog.
+She sells seashells by the seashore, and the shells she sells are surely seashells.
+How much wood would a woodchuck chuck if a woodchuck could chuck wood?
+Peter Piper picked a peck of pickled peppers.
+Betty Botter bought some butter, but she said this butter's bitter.
+The rain in Spain stays mainly on the plain.
+I saw Susie sitting in a shoeshine shop.
+Six slippery snails slid slowly seaward.
+Whether the weather is warm or whether the weather is cold, we'll weather the weather.
+Which wristwatches are Swiss wristwatches?
+A proper copper coffee pot with a copper-colored popping lid.
+Near an ear, a nearer ear, a nearly eerie ear appears.
+Red lorry, yellow lorry — try saying that five times fast.
+Thirty-three thousand thirsty soldiers thrashed through the thorny thicket.
+Rubber baby buggy bumpers bounce and rebound beautifully.
+The children played happily in the park until the sun dipped below the hills.
+Could you please pass the salt and pepper to the end of the table?
+The astronaut floated weightlessly through the vast dark expanse of space.
+Every morning he brewed fresh coffee and read the newspaper on the porch.
+The old wooden bridge creaked under the weight of the passing cars.
+A flock of birds took flight as the thunder rolled across the distant hills.
+The library was quiet except for the soft rustle of turning pages.
+The mountain peak was shrouded in mist and impossible to see clearly from below.
+After a long day of hiking, she finally reached the summit at sunset.
+The jazz band played until midnight, filling the small club with a rich golden sound.
+He carefully arranged the flowers in a beautiful blue ceramic vase on the windowsill.
+The recipe calls for three cups of flour and two tablespoons of brown sugar.
+Lightning flashed across the sky, followed seconds later by a low rumble of thunder.
+They drove through the desert for hours without seeing another car or a single building.
+The young scientist discovered a new method for purifying drinking water in remote regions.
+Her laughter echoed through the empty halls of the old stone castle.
+The train arrived at the station precisely on schedule, as it always did.
+I would love a large latte, please, with an extra shot of espresso and a little foam.
+She carefully stitched the intricate pattern into the smooth silken fabric.
+The company announced record profits for the third consecutive quarter.
+He stared at the blank page for an hour before writing the very first word.
+The puppy chased its tail around the garden until it collapsed in a dizzy heap.
+Thousands of tourists visited the ancient ruins during every summer season.
+The chef seasoned the steak with garlic, rosemary, and freshly cracked black pepper.
+A sudden gust of wind sent the dry autumn leaves spiraling into the golden air.
+The professor explained the theory with remarkable clarity and unexpected depth.
+She pressed her palm against the cold glass and watched her breath slowly fog the pane.
+Would you like some more tea, or shall I get you something a little stronger?
+The fireworks burst overhead in brilliant showers of gold, crimson, and electric blue.
+Please ensure all windows and doors are securely locked before you leave for the night.
+The detective examined each clue methodically, slowly piecing together the whole truth.
+Golden afternoon sunlight filtered through the sheer curtains onto the hardwood floor.
+The documentary explored the complex and often fragile relationship between humans and nature.
+He practiced the piano for three hours every afternoon without missing a single day.
+The coastal town was charming, with narrow cobblestone streets and bright flower boxes.
+She woke before dawn and watched the stars gradually fade as the morning arrived.
+Thick thunderclouds gathered on the southern horizon, promising a heavy and prolonged storm.
+The newborn fawn stood on trembling legs in the soft dappled light of the forest.
+After retirement, he spent his mornings tending the garden and his evenings reading.
+The symphony reached its emotional climax, and the entire audience held its breath.
+Fresh bread baking in the oven filled the entire house with a warm and comforting smell.
+The athlete crossed the finish line with her arms raised high in hard-won triumph.
+We strolled through the evening market, sampling food from nearly every stall.
+Somewhere between sleep and waking, she thought she heard someone softly calling her name.
+The ancient stars aligned in patterns that sailors used to navigate the open sea.
+The surgeon worked swiftly and with extraordinary precision under tremendous pressure.
+He painted the landscape with bold broad strokes of umber, ochre, and warm sienna.
+The argument dissolved into laughter the moment the cat knocked the vase off the shelf.
+The words faded on the page as her tired eyes grew heavy with the pull of sleep.
+An early frost had crystallized the lawn into a carpet of sparkling white diamonds.
+The mechanic diagnosed the problem in minutes and had the car fixed well before noon.
+She collected rare antique books, old maps, and vintage photographs from foreign lands.
+The heated debate raged for several hours but ended without a clear or satisfying resolution.
+Ripples spread silently across the still pond as the stone skipped across the surface.
+The child pressed his nose against the bakery window, eyes wide and bright with wonder.
+Three free throws from the three-point line and the entire crowd erupted in wild celebration.
+The expedition team set up their base camp at the foot of the massive glacier.
+She had memorized every single line of dialogue before the first rehearsal even began.
+The fragrant jasmine climbed the old garden wall and tumbled beautifully over the top.
+A chorus of frogs sang in the marsh as the fireflies began to glow and drift.
+The architect designed the entire building to blend seamlessly with its natural surroundings.
+He wrote long, detailed letters home every Sunday without ever missing a single week.
+The magician's final trick left the entire stunned audience completely and utterly speechless.
+Storm clouds parted briefly to reveal a full silver moon shining brightly against the dark.
+She inherited her grandmother's old recipe box and spent the whole summer cooking from it.
+The traffic light switched to green and the busy intersection flooded immediately with cars.
+Both brothers worked the family farm together for more than fifty consecutive unbroken years.
+The professor paused, then smiled warmly, as if the question had genuinely amused him.
+His quiet speech began softly, but by the end it filled the entire auditorium with sound.
+The hikers rested beside a cold clear mountain stream and ate their well-earned lunch.
+Firelight threw dancing amber shadows across the rough stone walls of the small cabin.
+She typed quickly and rhythmically, her fingers barely pausing between each long sentence.
+The submarine descended slowly into the pitch darkness of the cold deep ocean floor.
+Beyond the ridge, the valley spread out below like a patchwork quilt of green and gold.
+The stray cat appeared every morning, sat patiently by the door, and waited for breakfast.
+Overhead, the geese flew in a perfect V formation, calling as they went south for winter.
+The market was alive with color and noise: vendors shouting, children laughing, music playing.
+He folded the letter carefully, sealed the envelope, and set it on the hall table.
+The glass vase shattered on the tile floor, scattering a thousand tiny fragments everywhere.
+Candles flickered in the draft as the old farmhouse door swung open in the autumn wind.
+The final chapter answered every question except the one that mattered most to her.
+She stepped off the plane and immediately felt the warm humid air wash over her skin.
+The smell of pine and woodsmoke drifted across the campsite as the stars came out.
+Thank you for completing all one hundred lines of this voice recording session today.

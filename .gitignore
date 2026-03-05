@@ -1,0 +1,20 @@
+# C# build artifacts
+VoiceCapture/bin/
+VoiceCapture/obj/
+*.user
+
+# Python
+embed/venv/
+embed/__pycache__/
+embed/*.pyc
+embed/recordings_processed/
+*.egg-info/
+
+# Generated voice files
+*.npy
+*.pt
+
+# Recordings (large binary files — exclude from repo)
+VoiceCapture/recordings/
+recordings/
+recordings_processed/
