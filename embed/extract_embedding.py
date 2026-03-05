@@ -133,65 +133,53 @@ def extract_kokoro(wav_paths: list[str]) -> np.ndarray | None:
         return None
 
 
-# ── Step 2b: pure-torch fallback ─────────────────────────────────────────────
+# ── Step 2b: librosa-based fallback ──────────────────────────────────────────
 
 def extract_torch_fallback(wav_paths: list[str]) -> np.ndarray | None:
     """
-    Pure torchaudio fallback — no extra packages needed.
+    Librosa-based fallback — uses only librosa + numpy (already installed).
+    Avoids torchaudio.load which requires torchcodec on torchaudio >= 2.6.
 
     Computes log-mel spectrogram statistics (mean + std per band) and projects
-    them to match the dimension of existing Kokoro voice files (detected at runtime,
-    default 256). Result shape: (1, target_dim).
+    to 256 dims to match Kokoro-82M's expected style vector shape.
+    Result shape: (1, 256).
 
-    NOTE: This is a best-effort approximation. It may not produce voices that
-    sound exactly like you; run the Kokoro method when possible for real quality.
+    NOTE: Best-effort approximation. Use the Kokoro method for real quality.
     """
     try:
-        import torch
-        import torchaudio
-        import torchaudio.transforms as T
+        import librosa
 
-        N_MELS = 80
-        TARGET_DIM = 256   # Kokoro-82M style dim; overridden below if fmt is known
-
-        mel_tf = T.MelSpectrogram(
-            sample_rate=24_000,
-            n_fft=2048,
-            hop_length=300,
-            n_mels=N_MELS,
-            power=1.0,
-        )
-        amp_to_db = T.AmplitudeToDB()
+        N_MELS     = 80
+        TARGET_DIM = 256
 
         all_stats = []
         for path in wav_paths:
             try:
-                wav, sr = torchaudio.load(path)
-                if sr != 24_000:
-                    wav = T.Resample(sr, 24_000)(wav)
-                if wav.shape[0] > 1:
-                    wav = wav.mean(0, keepdim=True)
-
-                mel = amp_to_db(mel_tf(wav))    # (1, N_MELS, T)
-                mean = mel.mean(dim=-1)          # (1, N_MELS)
-                std  = mel.std(dim=-1)           # (1, N_MELS)
-                stats = torch.cat([mean, std], dim=1)   # (1, N_MELS*2 = 160)
-                all_stats.append(stats.numpy())
-                print(f"  OK  {os.path.basename(path):30s}  stats shape={stats.shape}")
+                audio, sr = librosa.load(path, sr=24_000, mono=True)
+                mel = librosa.feature.melspectrogram(
+                    y=audio, sr=sr, n_fft=2048, hop_length=300, n_mels=N_MELS
+                )
+                mel_db = librosa.power_to_db(mel)          # (N_MELS, T)
+                stats  = np.concatenate([
+                    mel_db.mean(axis=1),                   # (N_MELS,)
+                    mel_db.std(axis=1),                    # (N_MELS,)  → total 160
+                ])
+                all_stats.append(stats)
+                print(f"  OK  {os.path.basename(path):30s}")
             except Exception as exc:
                 print(f"  ERR {os.path.basename(path)}: {exc}")
 
         if not all_stats:
             return None
 
-        avg = np.mean(all_stats, axis=0)   # (1, 160)
+        avg = np.mean(all_stats, axis=0).reshape(1, -1)   # (1, 160)
 
-        # Project to TARGET_DIM via zero-padding or truncation so the shape
-        # matches what Kokoro expects (checked via inspect_voices).
+        # Pad / truncate to TARGET_DIM
         current_dim = avg.shape[1]
         if current_dim < TARGET_DIM:
-            pad = np.zeros((1, TARGET_DIM - current_dim), dtype=np.float32)
-            avg = np.concatenate([avg, pad], axis=1)
+            avg = np.concatenate(
+                [avg, np.zeros((1, TARGET_DIM - current_dim), dtype=np.float32)], axis=1
+            )
         else:
             avg = avg[:, :TARGET_DIM]
 
